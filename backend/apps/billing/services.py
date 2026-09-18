@@ -10,7 +10,8 @@ class StripeService:
         if org.stripe_customer_id:
             return org.stripe_customer_id
 
-        customer = stripe.Customer.create(email=org.name)
+        owner_email = org.memberships.order_by('created_at').first().user.email if org.memberships.exists() else 'billing@teambilling.local'
+        customer = stripe.Customer.create(email=owner_email)
         org.stripe_customer_id = customer.id
         org.save(update_fields=['stripe_customer_id'])
         return customer.id
