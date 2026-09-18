@@ -1,10 +1,10 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 import stripe
 from django.conf import settings
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
+from django.utils import timezone as django_timezone
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -106,7 +106,7 @@ class StripeWebhookAPIView(APIView):
         try:
             self._handle_event(event)
             stripe_event.processed = True
-            stripe_event.processed_at = timezone.now()
+            stripe_event.processed_at = django_timezone.now()
             stripe_event.save(update_fields=['processed', 'processed_at'])
         except Exception:
             stripe_event.processed = False

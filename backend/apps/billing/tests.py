@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -6,7 +7,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.billing.models import Plan, Subscription
+from apps.billing.models import Plan, StripeEvent, Subscription
 from apps.organizations.models import Membership, Organization
 
 User = get_user_model()
@@ -44,3 +45,44 @@ class BillingAPITests(APITestCase):
             format='json',
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch('apps.billing.services.stripe.checkout.Session.create')
+    def test_checkout_session_is_created_for_owner(self, session_create):
+        session_create.return_value = type('Session', (), {'url': 'https://checkout.stripe.test/session_123'})()
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.post(
+            reverse('billing-checkout'),
+            {'organization_id': self.organization.id, 'plan': 'PRO'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('checkout_url', response.data)
+
+    @patch('apps.billing.views.stripe.Webhook.construct_event')
+    def test_valid_webhook_updates_subscription(self, construct_event):
+        construct_event.return_value = {
+            'id': 'evt_123',
+            'type': 'customer.subscription.updated',
+            'data': {'object': {'id': 'sub_123', 'status': 'active', 'cancel_at_period_end': False, 'current_period_start': 1700000000, 'current_period_end': 1700003600}},
+        }
+        self.client.post(
+            reverse('billing-webhook'),
+            data=b'{}',
+            format='json',
+            HTTP_STRIPE_SIGNATURE='valid-signature',
+        )
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, Subscription.Status.ACTIVE)
+        self.assertTrue(StripeEvent.objects.filter(stripe_event_id='evt_123').exists())
+
+    @patch('apps.billing.views.stripe.Webhook.construct_event')
+    def test_duplicate_webhook_is_idempotent(self, construct_event):
+        construct_event.return_value = {
+            'id': 'evt_duplicate',
+            'type': 'customer.subscription.updated',
+            'data': {'object': {'id': 'sub_123', 'status': 'active', 'cancel_at_period_end': False, 'current_period_start': 1700000000, 'current_period_end': 1700003600}},
+        }
+        self.client.post(reverse('billing-webhook'), b'{}', format='json', HTTP_STRIPE_SIGNATURE='valid-signature')
+        response = self.client.post(reverse('billing-webhook'), b'{}', format='json', HTTP_STRIPE_SIGNATURE='valid-signature')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(StripeEvent.objects.filter(stripe_event_id='evt_duplicate').count(), 1)
