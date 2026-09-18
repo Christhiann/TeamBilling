@@ -72,36 +72,7 @@ Para criar um usuário administrador:
 docker compose exec backend python manage.py createsuperuser
 ```
 
-## Desenvolvimento sem Docker
 
-### Backend
-
-É necessário ter PostgreSQL rodando e as variáveis de conexão configuradas. No PowerShell:
-
-```powershell
-cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-$env:POSTGRES_DB = "teambilling"
-$env:POSTGRES_USER = "postgres"
-$env:POSTGRES_PASSWORD = "postgres"
-$env:POSTGRES_HOST = "localhost"
-$env:POSTGRES_PORT = "5432"
-python manage.py migrate
-python manage.py runserver
-```
-
-### Frontend
-
-Em outro terminal:
-
-```powershell
-cd frontend
-npm install
-$env:NEXT_PUBLIC_API_URL = "http://localhost:8000"
-npm run dev
-```
 
 ## Testes e validações
 
