@@ -62,10 +62,10 @@ class OrganizationMembershipsAPIView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
 
     def post(self, request, *args, **kwargs):
-        organization = get_object_or_404(
-            Organization.objects.filter(memberships__user=request.user, memberships__role=Membership.Role.OWNER),
-            pk=kwargs['pk'],
-        )
+        organization = get_object_or_404(Organization.objects.filter(memberships__user=request.user), pk=kwargs['pk'])
+        if not organization.memberships.filter(user=request.user, role=Membership.Role.OWNER).exists():
+            return Response({'detail': 'Only owners can manage organization members.'}, status=status.HTTP_403_FORBIDDEN)
+
         email = request.data.get('email')
         if not email:
             return Response({'detail': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
